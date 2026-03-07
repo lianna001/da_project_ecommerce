@@ -1,0 +1,33 @@
+name: Daily Data Generation
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # Every day at 1AM UTC
+  workflow_dispatch:       # Also allows manual trigger from GitHub UI
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy
+
+      - name: Run daily data generator
+        run: python scripts/generate_daily.py
+
+      - name: Commit and push generated data
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Add daily stats $(date +'%Y-%m-%d')"
+          git push
