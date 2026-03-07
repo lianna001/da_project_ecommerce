@@ -31,3 +31,5 @@ jobs:
           git add data/
           git diff --staged --quiet || git commit -m "Add daily stats $(date +'%Y-%m-%d')"
           git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
