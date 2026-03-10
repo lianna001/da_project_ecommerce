@@ -1,0 +1,13 @@
+-- 1. 관리자 권한으로 변경 (이게 핵심입니다)
+USE ROLE SYSADMIN;
+
+-- 2. 이미 있는 'SNOWFLAKE_LEARNING_DB' 안에 테이블 강제 생성
+-- (경로를 다 적어주면 'current database' 에러가 나지 않습니다)
+CREATE OR REPLACE TABLE SNOWFLAKE_LEARNING_DB.PUBLIC.RAW_PURCHASE_DATA (
+    purchase_id VARCHAR,
+    amount NUMBER,
+    purchase_date DATE
+);
+
+-- 3. 생성 확인
+SELECT * FROM SNOWFLAKE_LEARNING_DB.PUBLIC.RAW_PURCHASE_DATA;
