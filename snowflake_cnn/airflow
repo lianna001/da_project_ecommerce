@@ -4,52 +4,47 @@ from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from datetime import datetime
 import pandas as pd
 import numpy as np
-import os
-import pendulum
+from sqlalchemy import text
 
-def save_daily_purchase():
-    # 저장할 폴더 경로 (본인 환경에 맞게 자동 설정)
-    save_path = '/opt/airflow/dags/data'
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
+
+def insert_daily_data_to_snowflake(ds, **kwargs):
+    hook = SnowflakeHook(snowflake_conn_id='snowflake_conn')
     
-    local_tz = pendulum.timezone("America/Los_Angeles")
-    today = pendulum.now(local_tz).strftime('%Y-%m-%d')
-    #today = datetime.now().strftime('%Y-%m-%d')
-    
-    # 데이터 생성
+    # 1. hook.run을 사용하면 문자열 에러 없이 바로 삭제 가능합니다.
+    delete_sql = f"DELETE FROM RAW_PURCHASE_DATA WHERE purchase_date = '{ds}'"
+    hook.run(delete_sql)
+    print(f"{ds} 기존 데이터 삭제 완료")
+
+    # 2. 데이터 생성
     df = pd.DataFrame({
         'purchase_id': [f'P{i:03}' for i in range(1, 6)],
         'amount': np.random.randint(1, 10, size=5) * 5000,
-        'purchase_date': [today] * 5
+        'purchase_date': [ds] * 5
     })
     
-    # 파일 저장 (예: purchase_2026-03-09.csv)
-    file_name = f'purchase_{today}.csv'
-    df.to_csv(os.path.join(save_path, file_name), index=False)
-    print(f"--- {file_name} 저장 완료! ---")
+    # 3. SQLAlchemy 엔진으로 적재
+    engine = hook.get_sqlalchemy_engine()
+    df.to_sql(
+        name='RAW_PURCHASE_DATA', 
+        con=engine, 
+        schema='PUBLIC', 
+        if_exists='append', 
+        index=False
+    )
+    print(f"{ds} 데이터 5건 적재 완료")
+    
 
-### 추가된 부분: Snowflake로 데이터 전송 ###
-    try:
-        # 에어플로우 UI에서 만든 Connection ID 입력 (snowflake_conn)
-        hook = SnowflakeHook(snowflake_conn_id='snowflake_conn')
-        engine = hook.get_sqlalchemy_engine()
-        
-        # Snowflake에 있는 테이블 이름 'raw_purchase_data'에 데이터 밀어넣기
-        # if_exists='append'는 기존 데이터 뒤에 계속 붙인다는 뜻입니다.
-        df.to_sql('raw_purchase_data', con=engine, if_exists='append', index=False)
-        print("--- Snowflake 전송 완료! ---")
-    except Exception as e:
-        print(f"Snowflake 전송 실패: {e}")
-
+# DAG 설정 부분
 with DAG(
-    dag_id='daily_purchase_save',
-    start_date=datetime(2024, 3, 1),
-    schedule='0 12 * * *',  # 시간설정
-    catchup=False
+    dag_id='direct_snowflake_load_v3', # ID를 살짝 바꿔서 새로 인식시키세요
+    start_date=datetime(2026, 3, 1),
+    schedule='@daily',
+    catchup=True # 과거 날짜를 자동으로 다 실행함
 ) as dag:
 
-    task1 = PythonOperator(
-        task_id='save_csv_task',
-        python_callable=save_daily_purchase
+    task = PythonOperator(
+        task_id='load_to_snowflake',
+        python_callable=insert_daily_data_to_snowflake,
+        # 핵심: {{ ds }} 템플릿을 함수 인자인 ds로 넘겨줌
+        op_kwargs={'ds': '{{ ds }}'} 
     )
